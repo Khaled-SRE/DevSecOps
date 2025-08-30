@@ -128,16 +128,6 @@ Edit the workflow file `.github/workflows/zap-security-scan.yml` to modify:
 - Trigger schedules
 - Output formats
 
-### Local Development
-```bash
-# Test scan locally
-./zap.sh https://localhost:3000
-
-# Run with custom timeout
-export SCAN_TIMEOUT=180
-./zap.sh
-```
-
 ```
 ┌─────────────────┐    ┌──────────────────┐    ┌─────────────────┐
 │   OWASP ZAP     │    │  Package Vetting │    │  DefectDojo    │
@@ -164,13 +154,6 @@ export SCAN_TIMEOUT=180
 - [Package Vetting Process](docs/package-vetting.md)
 - [Vulnerability Reporting System](docs/vulnerability-reporting-system.md)
 
-## 🤝 Contributing
-
-1. Fork the repository
-2. Create a feature branch
-3. Make your changes
-4. Test thoroughly
-5. Submit a pull request
 
 ## Conclusion
 
