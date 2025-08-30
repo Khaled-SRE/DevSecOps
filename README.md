@@ -130,14 +130,14 @@ Edit the workflow file `.github/workflows/zap-security-scan.yml` to modify:
 
 ```
 ┌─────────────────┐    ┌──────────────────┐    ┌─────────────────┐
-│   OWASP ZAP     │    │  Package Vetting │    │  DefectDojo    │
-│   Scanner       │    │  Workflow        │    │  Dashboard     │
+│   OWASP ZAP     │    │  Package Vetting │    │  DefectDojo     │
+│   Scanner       │    │  Workflow        │    │  Dashboard      │
 └─────────────────┘    └──────────────────┘    └─────────────────┘
          │                       │                       │
          ▼                       ▼                       ▼
 ┌─────────────────┐    ┌──────────────────┐    ┌─────────────────┐
-│   zap.sh        │    │  GitHub Actions  │    │  Python API    │
-│   Automation    │    │  Integration     │    │  Integration   │
+│   zap.sh        │    │  GitHub Actions  │    │  Python API     │
+│   Automation    │    │  Integration     │    │  Integration    │
 └─────────────────┘    └──────────────────┘    └─────────────────┘
          │                       │                       │
          ▼                       ▼                       ▼
