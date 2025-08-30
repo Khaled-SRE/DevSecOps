@@ -1,0 +1,331 @@
+name: Package Security Vetting
+
+on:
+  workflow_dispatch:
+    inputs:
+      package_name:
+        description: 'Package name to vet'
+        required: true
+        default: 'Handlebars.Net'
+      package_version:
+        description: 'Package version'
+        required: true
+        default: '2.1.6'
+      github_repo_url:
+        description: 'Optional: GitHub repository API URL'
+        required: false
+        default: ''
+      ecosystem:
+        description: 'Package ecosystem'
+        required: false
+        default: 'auto'
+        type: choice
+        options:
+          - auto
+          - dotnet
+          - npm
+          - python
+          - java
+          - go
+
+jobs:
+  package-vetting:
+    runs-on: ubuntu-latest
+    name: Security Vetting Assessment
+    
+    steps:
+    - name: Checkout Repository
+      uses: actions/checkout@v4
+      
+    - name: Setup Go (for OSV-Scanner)
+      uses: actions/setup-go@v4
+      with:
+        go-version: '1.21'
+        
+    - name: Setup Node.js (for npm packages)
+      uses: actions/setup-node@v4
+      with:
+        node-version: '18'
+      if: github.event.inputs.ecosystem == 'npm' || startsWith(github.event.inputs.package_name, '@')
+      
+    - name: Setup .NET (for NuGet packages)  
+      uses: actions/setup-dotnet@v3
+      with:
+        dotnet-version: '8.0.x'
+      if: github.event.inputs.ecosystem == 'dotnet' || contains(github.event.inputs.package_name, '.Net')
+      
+    - name: Install System Dependencies
+      run: |
+        sudo apt-get update
+        sudo apt-get install -y jq curl git
+        
+    - name: Install OSV-Scanner
+      run: |
+        go install github.com/google/osv-scanner/cmd/osv-scanner@latest
+        echo "$HOME/go/bin" >> $GITHUB_PATH
+        
+    - name: Verify Tools Installation
+      run: |
+        osv-scanner --version
+        jq --version
+        
+    - name: Create Package Vetting Script
+      run: |
+        cat > package-vetting.sh << 'EOF'
+        #!/bin/bash
+        
+        PACKAGE_NAME="$1"
+        PACKAGE_VERSION="$2"
+        GITHUB_REPO_URL="$3"
+        ECOSYSTEM="${4:-auto}"
+        
+        # Generate report directory
+        TIMESTAMP=$(date +%Y%m%d_%H%M%S)
+        REPORT_DIR="./vetting-report-${PACKAGE_NAME}-${PACKAGE_VERSION}-${TIMESTAMP}"
+        mkdir -p "${REPORT_DIR}"
+        
+        echo "🔍 Package Security Vetting: ${PACKAGE_NAME} v${PACKAGE_VERSION}"
+        echo "📊 Report Directory: ${REPORT_DIR}"
+        
+        # Ecosystem detection
+        if [[ "$PACKAGE_NAME" == *.Net* ]] || [[ "$PACKAGE_NAME" == *.NET* ]]; then
+            DETECTED_ECOSYSTEM="dotnet"
+            PURL="pkg:nuget/${PACKAGE_NAME}@${PACKAGE_VERSION}"
+        elif [[ "$PACKAGE_NAME" =~ ^@?[a-z0-9-]+$ ]] || [[ "$ECOSYSTEM" == "npm" ]]; then
+            DETECTED_ECOSYSTEM="npm"  
+            PURL="pkg:npm/${PACKAGE_NAME}@${PACKAGE_VERSION}"
+        elif [[ "$ECOSYSTEM" == "python" ]]; then
+            DETECTED_ECOSYSTEM="python"
+            PURL="pkg:pypi/${PACKAGE_NAME}@${PACKAGE_VERSION}"
+        else
+            DETECTED_ECOSYSTEM="generic"
+            PURL="pkg:generic/${PACKAGE_NAME}@${PACKAGE_VERSION}"
+        fi
+        
+        echo "[1/5] Detected ecosystem: ${DETECTED_ECOSYSTEM}"
+        
+        # GitHub API URL construction
+        echo "[2/5] Repository analysis..."
+        if [ -n "$GITHUB_REPO_URL" ]; then
+            GITHUB_API="$GITHUB_REPO_URL"
+        else
+            case "$PACKAGE_NAME" in
+                "Handlebars.Net")
+                    GITHUB_API="https://api.github.com/repos/Handlebars-Net/Handlebars.Net"
+                    ;;
+                "react")
+                    GITHUB_API="https://api.github.com/repos/facebook/react"
+                    ;;
+                "vue")
+                    GITHUB_API="https://api.github.com/repos/vuejs/vue"
+                    ;;
+                *)
+                    GITHUB_API="https://api.github.com/repos/${PACKAGE_NAME}/${PACKAGE_NAME}"
+                    ;;
+            esac
+        fi
+        
+        # Fetch GitHub data
+        GITHUB_DATA=$(curl -s "${GITHUB_API}")
+        if echo "${GITHUB_DATA}" | jq -e . >/dev/null 2>&1; then
+            STARS=$(echo "${GITHUB_DATA}" | jq -r '.stargazers_count // "N/A"')
+            FORKS=$(echo "${GITHUB_DATA}" | jq -r '.forks_count // "N/A"')
+            LICENSE=$(echo "${GITHUB_DATA}" | jq -r '.license.name // "Unknown"')
+            LAST_UPDATE=$(echo "${GITHUB_DATA}" | jq -r '.updated_at // "N/A"')
+            CLONE_URL=$(echo "${GITHUB_DATA}" | jq -r '.clone_url // "N/A"')
+            DESCRIPTION=$(echo "${GITHUB_DATA}" | jq -r '.description // "N/A"')
+        else
+            STARS="N/A"; FORKS="N/A"; LICENSE="Unknown"
+            LAST_UPDATE="N/A"; CLONE_URL="N/A"; DESCRIPTION="N/A"
+        fi
+        
+        # Package registry analysis
+        echo "[3/5] Package registry analysis..."
+        case "$DETECTED_ECOSYSTEM" in
+            "dotnet")
+                DOWNLOADS=$(curl -s "https://azuresearch-usnc.nuget.org/query?q=packageid:${PACKAGE_NAME}" | jq -r '.data[0].totalDownloads // "N/A"')
+                PACKAGE_URL="https://www.nuget.org/packages/${PACKAGE_NAME}"
+                ;;
+            "npm")
+                DOWNLOADS=$(curl -s "https://api.npmjs.org/downloads/point/last-month/${PACKAGE_NAME}" | jq -r '.downloads // "N/A"')
+                PACKAGE_URL="https://www.npmjs.com/package/${PACKAGE_NAME}"
+                ;;
+            *)
+                DOWNLOADS="N/A"
+                PACKAGE_URL="N/A"
+                ;;
+        esac
+        
+        # Sonatype OSS Index vulnerability check
+        echo "[4/5] Sonatype OSS Index vulnerability scan..."
+        OSS_RESPONSE=$(curl -s -X POST https://ossindex.sonatype.org/api/v3/component-report \
+          -H "Content-Type: application/json" \
+          -d "{\"coordinates\": [\"$PURL\"]}")
+          
+        if echo "$OSS_RESPONSE" | jq -e . >/dev/null 2>&1; then
+            VULN_COUNT=$(echo "$OSS_RESPONSE" | jq '.[0].vulnerabilities | length')
+            echo "$OSS_RESPONSE" > "${REPORT_DIR}/oss-index-results.json"
+        else
+            VULN_COUNT=0
+        fi
+        
+        # OSV-Scanner vulnerability scan
+        SCAN_STATUS="SKIPPED"
+        OSV_VULNS=0
+        
+        if [ "$CLONE_URL" != "N/A" ]; then
+            echo "   Cloning repository for OSV scan..."
+            TEMP_DIR="temp-${PACKAGE_NAME}-scan"
+            if git clone --depth 1 "$CLONE_URL" "$TEMP_DIR" 2>/dev/null; then
+                osv-scanner -r "$TEMP_DIR" --format json > "${REPORT_DIR}/osv-scan.json" 2>/dev/null || true
+                if [ -f "${REPORT_DIR}/osv-scan.json" ]; then
+                    OSV_VULNS=$(jq '[.results[]?.packages[]?.vulnerabilities[]?] | length' "${REPORT_DIR}/osv-scan.json" 2>/dev/null || echo "0")
+                    SCAN_STATUS="COMPLETED"
+                fi
+                rm -rf "$TEMP_DIR"
+            fi
+        fi
+        
+        # Generate comprehensive report
+        echo "[5/5] Generating vetting report..."
+        {
+            echo "=== PACKAGE SECURITY VETTING REPORT ==="
+            echo "Package: ${PACKAGE_NAME}"
+            echo "Version: ${PACKAGE_VERSION}"
+            echo "Ecosystem: ${DETECTED_ECOSYSTEM}"
+            echo "PURL: ${PURL}"
+            echo "Vetting Date: $(date)"
+            echo "Package URL: ${PACKAGE_URL}"
+            echo "Repository: ${GITHUB_API}"
+            echo ""
+            
+            echo "=== REPOSITORY METRICS ==="
+            echo "Description: ${DESCRIPTION}"
+            echo "Stars: ${STARS}"
+            echo "Forks: ${FORKS}"
+            echo "License: ${LICENSE}"
+            echo "Last Updated: ${LAST_UPDATE}"
+            echo ""
+            
+            echo "=== ADOPTION METRICS ==="
+            echo "Downloads: ${DOWNLOADS}"
+            echo ""
+            
+            echo "=== VULNERABILITY ASSESSMENT ==="
+            echo "Sonatype OSS Index Vulnerabilities: ${VULN_COUNT}"
+            echo "OSV-Scanner Status: ${SCAN_STATUS}"
+            echo "OSV-Scanner Vulnerabilities: ${OSV_VULNS}"
+            
+            TOTAL_VULNS=$((VULN_COUNT + OSV_VULNS))
+            
+            if [ "$TOTAL_VULNS" -gt "0" ]; then
+                echo "⚠️ SECURITY VULNERABILITIES DETECTED: ${TOTAL_VULNS}"
+            else
+                echo "✅ NO VULNERABILITIES DETECTED"
+            fi
+            echo ""
+            
+            echo "=== RISK ASSESSMENT ==="
+            
+            # Risk scoring
+            RISK_SCORE=0
+            
+            if [ "$TOTAL_VULNS" -gt "0" ]; then
+                RISK_SCORE=$((RISK_SCORE + 3))
+            fi
+            
+            if [ "$STARS" != "N/A" ] && [ "$STARS" -lt 100 ]; then
+                RISK_SCORE=$((RISK_SCORE + 1))
+            fi
+            
+            if [[ "$LICENSE" != "MIT License" && "$LICENSE" != "Apache License 2.0" ]]; then
+                RISK_SCORE=$((RISK_SCORE + 1))
+            fi
+            
+            echo "Risk Score: ${RISK_SCORE}/5"
+            
+            if [ "$RISK_SCORE" -eq "0" ]; then
+                echo "DECISION: ✅ APPROVED FOR ENTERPRISE USE"
+                echo "Risk Level: LOW"
+            elif [ "$RISK_SCORE" -le "2" ]; then
+                echo "DECISION: ✅ APPROVED WITH CONDITIONS"
+                echo "Risk Level: MEDIUM"
+            else
+                echo "DECISION: ❌ REQUIRES MANUAL REVIEW"
+                echo "Risk Level: HIGH"
+            fi
+            
+            echo ""
+            echo "=== INSTALLATION INSTRUCTIONS ==="
+            case "$DETECTED_ECOSYSTEM" in
+                "dotnet")
+                    echo "dotnet add package ${PACKAGE_NAME} --version ${PACKAGE_VERSION}"
+                    ;;
+                "npm")
+                    echo "npm install ${PACKAGE_NAME}@${PACKAGE_VERSION}"
+                    ;;
+                "python")
+                    echo "pip install ${PACKAGE_NAME}==${PACKAGE_VERSION}"
+                    ;;
+                *)
+                    echo "Use appropriate package manager for ${DETECTED_ECOSYSTEM}"
+                    ;;
+            esac
+            
+        } > "${REPORT_DIR}/package-vetting-report.txt"
+        
+        echo ""
+        echo "✅ Package Vetting Complete!"
+        echo "📊 Report: ${REPORT_DIR}/package-vetting-report.txt"
+        echo ""
+        
+        # Display report for GitHub Actions log
+        cat "${REPORT_DIR}/package-vetting-report.txt"
+        
+        # Create summary for GitHub Actions
+        echo "## 📋 Package Vetting Summary" >> $GITHUB_STEP_SUMMARY
+        echo "**Package:** ${PACKAGE_NAME} v${PACKAGE_VERSION}" >> $GITHUB_STEP_SUMMARY
+        echo "**Ecosystem:** ${DETECTED_ECOSYSTEM}" >> $GITHUB_STEP_SUMMARY
+        echo "**Total Vulnerabilities:** ${TOTAL_VULNS}" >> $GITHUB_STEP_SUMMARY
+        echo "**Risk Score:** ${RISK_SCORE}/5" >> $GITHUB_STEP_SUMMARY
+        
+        if [ "$RISK_SCORE" -eq "0" ]; then
+            echo "**Status:** ✅ APPROVED" >> $GITHUB_STEP_SUMMARY
+        elif [ "$RISK_SCORE" -le "2" ]; then
+            echo "**Status:** ⚠️ CONDITIONAL APPROVAL" >> $GITHUB_STEP_SUMMARY
+        else
+            echo "**Status:** ❌ REQUIRES REVIEW" >> $GITHUB_STEP_SUMMARY
+        fi
+        EOF
+        
+        chmod +x package-vetting.sh
+        
+    - name: Run Package Vetting Assessment
+      id: vetting
+      run: |
+        ./package-vetting.sh "${{ github.event.inputs.package_name }}" "${{ github.event.inputs.package_version }}" "${{ github.event.inputs.github_repo_url }}" "${{ github.event.inputs.ecosystem }}"
+        
+    - name: Upload Vetting Reports
+      uses: actions/upload-artifact@v4
+      if: always()
+      with:
+        name: package-vetting-report-${{ github.event.inputs.package_name }}-${{ github.event.inputs.package_version }}
+        path: ./vetting-report-*/
+        retention-days: 30
+        
+    - name: Create Issue on High Risk
+      if: failure()
+      uses: actions/github-script@v7
+      with:
+        script: |
+          github.rest.issues.create({
+            owner: context.repo.owner,
+            repo: context.repo.repo,
+            title: `🚨 High Risk Package: ${{ github.event.inputs.package_name }}@${{ github.event.inputs.package_version }}`,
+            body: `A package vetting assessment has identified high risk factors for **${{ github.event.inputs.package_name }}@${{ github.event.inputs.package_version }}**.
+            
+            Please review the detailed assessment report in the workflow artifacts.
+            
+            **Action Required:** Manual security review before approval.`,
+            labels: ['security', 'package-vetting', 'high-risk']
+          })
