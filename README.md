@@ -138,40 +138,16 @@ export SCAN_TIMEOUT=180
 ./zap.sh
 ```
 
-## 📈 Monitoring and Alerts
-
-### GitHub Notifications
-- Workflow success/failure notifications
-- PR comments with scan results
-- Automatic issue creation for failures
-
-### DefectDojo Dashboards
-- Real-time vulnerability metrics
-- Executive reporting views
-- Compliance tracking
-
-## 🚨 Troubleshooting
-
-### Common Issues
-1. **Docker not running**: Ensure Docker daemon is active
-2. **Permission denied**: Make script executable with `chmod +x zap.sh`
-3. **DefectDojo connection failed**: Verify API token and URL
-4. **Scan timeout**: Increase timeout value for large applications
-
-### Debug Mode
-```bash
-# Run with verbose output
-bash -x ./zap.sh
 ```
 ┌─────────────────┐    ┌──────────────────┐    ┌─────────────────┐
-│   OWASP ZAP     │    │  Package Vetting │    │  DefectDojo     │
-│   Scanner       │    │  Workflow        │    │  Dashboard      │
+│   OWASP ZAP     │    │  Package Vetting │    │  DefectDojo    │
+│   Scanner       │    │  Workflow        │    │  Dashboard     │
 └─────────────────┘    └──────────────────┘    └─────────────────┘
          │                       │                       │
          ▼                       ▼                       ▼
 ┌─────────────────┐    ┌──────────────────┐    ┌─────────────────┐
-│   zap.sh        │    │  GitHub Actions  │    │  Python API     │
-│   Automation    │    │  Integration     │    │  Integration    │
+│   zap.sh        │    │  GitHub Actions  │    │  Python API    │
+│   Automation    │    │  Integration     │    │  Integration   │
 └─────────────────┘    └──────────────────┘    └─────────────────┘
          │                       │                       │
          ▼                       ▼                       ▼
