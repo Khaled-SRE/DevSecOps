@@ -1,0 +1,233 @@
+name: OWASP ZAP Security Scan
+
+on:
+  # Manual trigger
+  workflow_dispatch:
+    inputs:
+      target_url:
+        description: 'Target URL to scan'
+        required: true
+        default: 'https://admin.dev.beaconconnect.app'
+        type: string
+      scan_type:
+        description: 'Type of scan to run'
+        required: true
+        default: 'full'
+        type: choice
+        options:
+          - baseline
+          - full
+          - both
+      custom_scan_timeout:
+        description: 'Custom scan timeout in minutes'
+        required: false
+        default: '120'
+        type: string
+  
+  # Schedule scans (every Monday at 2 AM UTC)
+  schedule:
+    - cron: '0 2 * * 1'
+  
+  # Run on push to main branch
+  push:
+    branches: [ main, master ]
+  
+  # Run on pull requests to main branch
+  pull_request:
+    branches: [ main, master ]
+
+env:
+  # Default scan timeout (2 hours)
+  SCAN_TIMEOUT: 120
+  # Default target URL
+  DEFAULT_TARGET_URL: https://admin.dev.beaconconnect.app
+
+jobs:
+  security-scan:
+    name: OWASP ZAP Security Assessment
+    runs-on: ubuntu-latest
+    
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+        
+      - name: Set up Python
+        uses: actions/setup-python@v4
+        with:
+          python-version: '3.11'
+          
+      - name: Install Python dependencies
+        run: |
+          python -m pip install --upgrade pip
+          pip install requests
+          
+      - name: Create reports directory
+        run: |
+          TIMESTAMP=$(date +%Y%m%d_%H%M%S)
+          echo "TIMESTAMP=$TIMESTAMP" >> $GITHUB_ENV
+          echo "REPORT_DIR=./reports/$TIMESTAMP" >> $GITHUB_ENV
+          mkdir -p ./reports/$TIMESTAMP
+          
+      - name: Set scan parameters
+        run: |
+          if [ "${{ github.event_name }}" == "workflow_dispatch" ]; then
+            echo "TARGET_URL=${{ github.event.inputs.target_url }}" >> $GITHUB_ENV
+            echo "SCAN_TYPE=${{ github.event.inputs.scan_type }}" >> $GITHUB_ENV
+            if [ -n "${{ github.event.inputs.custom_scan_timeout }}" ]; then
+              echo "SCAN_TIMEOUT=${{ github.event.inputs.custom_scan_timeout }}" >> $GITHUB_ENV
+            fi
+          else
+            echo "TARGET_URL=$DEFAULT_TARGET_URL" >> $GITHUB_ENV
+            echo "SCAN_TYPE=full" >> $GITHUB_ENV
+          fi
+          
+      - name: Pull OWASP ZAP Docker image
+        run: docker pull zaproxy/zap-stable:latest
+        
+      - name: Run baseline scan
+        if: env.SCAN_TYPE == 'baseline' || env.SCAN_TYPE == 'both'
+        run: |
+          echo "🔍 Running baseline security scan..."
+          docker run --rm \
+            -v $(pwd):/zap/wrk/:rw \
+            -t zaproxy/zap-stable:latest \
+            zap-baseline.py \
+            -t ${{ env.TARGET_URL }} \
+            -x ${{ env.REPORT_DIR }}/baseline_report.xml \
+            -J ${{ env.REPORT_DIR }}/baseline_report.json \
+            -a -j -T 60
+        continue-on-error: true
+        
+      - name: Run comprehensive full scan
+        if: env.SCAN_TYPE == 'full' || env.SCAN_TYPE == 'both'
+        run: |
+          echo "🔍 Running comprehensive vulnerability scan..."
+          docker run --rm \
+            -v $(pwd):/zap/wrk/:rw \
+            -t zaproxy/zap-stable:latest \
+            zap-full-scan.py \
+            -t ${{ env.TARGET_URL }} \
+            -x ${{ env.REPORT_DIR }}/full_scan_report.xml \
+            -J ${{ env.REPORT_DIR }}/full_scan_report.json \
+            -T ${{ env.SCAN_TIMEOUT }}
+        continue-on-error: true
+        
+      - name: Generate scan summary
+        run: |
+          echo "📊 Generating scan summary..."
+          echo "# OWASP ZAP Security Scan Report" > ${{ env.REPORT_DIR }}/scan_summary.md
+          echo "" >> ${{ env.REPORT_DIR }}/scan_summary.md
+          echo "**Scan Details:**" >> ${{ env.REPORT_DIR }}/scan_summary.md
+          echo "- Target URL: ${{ env.TARGET_URL }}" >> ${{ env.REPORT_DIR }}/scan_summary.md
+          echo "- Scan Type: ${{ env.SCAN_TYPE }}" >> ${{ env.REPORT_DIR }}/scan_summary.md
+          echo "- Scan Date: $(date)" >> ${{ env.REPORT_DIR }}/scan_summary.md
+          echo "- GitHub Run ID: ${{ github.run_id }}" >> ${{ env.REPORT_DIR }}/scan_summary.md
+          echo "" >> ${{ env.REPORT_DIR }}/scan_summary.md
+          
+          if [ -f "${{ env.REPORT_DIR }}/baseline_report.xml" ]; then
+            echo "**Baseline Scan Results:**" >> ${{ env.REPORT_DIR }}/scan_summary.md
+            echo "- Report: baseline_report.xml" >> ${{ env.REPORT_DIR }}/scan_summary.md
+            echo "- Report: baseline_report.json" >> ${{ env.REPORT_DIR }}/scan_summary.md
+            echo "" >> ${{ env.REPORT_DIR }}/scan_summary.md
+          fi
+          
+          if [ -f "${{ env.REPORT_DIR }}/full_scan_report.xml" ]; then
+            echo "**Full Scan Results:**" >> ${{ env.REPORT_DIR }}/scan_summary.md
+            echo "- Report: full_scan_report.xml" >> ${{ env.REPORT_DIR }}/scan_summary.md
+            echo "- Report: full_scan_report.json" >> ${{ env.REPORT_DIR }}/scan_summary.md
+            echo "" >> ${{ env.REPORT_DIR }}/scan_summary.md
+          fi
+          
+          echo "**Next Steps:**" >> ${{ env.REPORT_DIR }}/scan_summary.md
+          echo "1. Review scan reports for vulnerabilities" >> ${{ env.REPORT_DIR }}/scan_summary.md
+          echo "2. Address any critical or high-severity findings" >> ${{ env.REPORT_DIR }}/scan_summary.md
+          echo "3. Upload results to DefectDojo if configured" >> ${{ env.REPORT_DIR }}/scan_summary.md
+          
+      - name: Upload scan results to DefectDojo
+        if: env.DEFECT_DOJO_API_TOKEN != '' && (env.SCAN_TYPE == 'full' || env.SCAN_TYPE == 'both')
+        env:
+          DEFECT_DOJO_API_TOKEN: ${{ secrets.DEFECT_DOJO_API_TOKEN }}
+          DEFECT_DOJO_URL: ${{ secrets.DEFECT_DOJO_URL || 'http://localhost:8080' }}
+        run: |
+          echo "📤 Uploading scan results to DefectDojo..."
+          python3 upload_to_defectdojo.py "${{ env.REPORT_DIR }}" "${{ env.TARGET_URL }}"
+        continue-on-error: true
+        
+      - name: Upload scan artifacts
+        uses: actions/upload-artifact@v4
+        with:
+          name: zap-scan-results-${{ env.TIMESTAMP }}
+          path: |
+            ${{ env.REPORT_DIR }}/
+            !${{ env.REPORT_DIR }}/.gitkeep
+          retention-days: 30
+          
+      - name: Comment on PR with scan results
+        if: github.event_name == 'pull_request'
+        uses: actions/github-script@v7
+        with:
+          script: |
+            const fs = require('fs');
+            const path = require('path');
+            
+            try {
+              const reportDir = process.env.REPORT_DIR;
+              const summaryPath = path.join(reportDir, 'scan_summary.md');
+              
+              if (fs.existsSync(summaryPath)) {
+                const summary = fs.readFileSync(summaryPath, 'utf8');
+                
+                github.rest.issues.createComment({
+                  issue_number: context.issue.number,
+                  owner: context.repo.owner,
+                  repo: context.repo.repo,
+                  body: `## 🔍 Security Scan Results\n\n${summary}\n\n📊 **Scan completed successfully!**\n\nReview the attached artifacts for detailed vulnerability reports.`
+                });
+              }
+            } catch (error) {
+              console.log('Could not comment on PR:', error.message);
+            }
+        env:
+          REPORT_DIR: ${{ env.REPORT_DIR }}
+          
+      - name: Create security scan issue
+        if: failure() && github.event_name == 'pull_request'
+        uses: actions/github-script@v7
+        with:
+          script: |
+            github.rest.issues.create({
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              title: '🚨 Security Scan Failed - Action Required',
+              body: `## Security Scan Failure\n\n**Target URL:** ${process.env.TARGET_URL}\n**Scan Type:** ${process.env.SCAN_TYPE}\n**Run ID:** ${context.runId}\n\n### What Happened\n\nThe OWASP ZAP security scan failed during execution. This could indicate:\n\n- Network connectivity issues\n- Target application unavailability\n- Docker container problems\n- Configuration errors\n\n### Next Steps\n\n1. Check the [workflow run logs](${context.serverUrl}/${context.repo.owner}/${context.repo.repo}/actions/runs/${context.runId})\n2. Verify target application availability\n3. Review scan configuration\n4. Re-run the scan when issues are resolved\n\n### Security Impact\n\n⚠️ **Security scans are critical for identifying vulnerabilities.**\n\nPlease address this issue promptly to maintain security posture.`,
+              labels: ['security', 'bug', 'high-priority'],
+              assignees: ['${{ github.repository_owner }}']
+            });
+        env:
+          TARGET_URL: ${{ env.TARGET_URL }}
+          SCAN_TYPE: ${{ env.SCAN_TYPE }}
+
+  # Optional: Dependency vulnerability check
+  dependency-check:
+    name: Dependency Vulnerability Check
+    runs-on: ubuntu-latest
+    needs: security-scan
+    if: always()
+    
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+        
+      - name: Run Trivy vulnerability scanner
+        uses: aquasecurity/trivy-action@master
+        with:
+          scan-type: 'fs'
+          scan-ref: '.'
+          format: 'sarif'
+          output: 'trivy-results.sarif'
+          
+      - name: Upload Trivy results to GitHub Security tab
+        uses: github/codeql-action/upload-sarif@v3
+        if: always()
+        with:
+          sarif_file: 'trivy-results.sarif'

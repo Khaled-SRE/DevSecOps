@@ -2,158 +2,199 @@
 
 ## Project Overview
 
-This repository contains a comprehensive DevSecOps solution that addresses all the requirements specified in the cybersecurity assessment. The project demonstrates a mature, production-ready approach to website security auditing, package vetting, and vulnerability reporting.
+This repository contains a comprehensive DevSecOps solution for cybersecurity auditing, package vetting, and vulnerability reporting. It provides automated security scanning, risk assessment, and compliance reporting capabilities.
 
-## Assessment Requirements Fulfillment
+## 🚀 Quick Start
 
-### ✅ 1. Website Cybersecurity Audit
-**Target**: https://admin.dev.beaconconnect.app
+### Prerequisites
+- Docker installed and running
+- Python 3.11+
+- DefectDojo instance (optional, for vulnerability management)
 
-**Implementation Status**: COMPLETE
-- **Automated Scanning**: OWASP ZAP integration with comprehensive baseline and full-scan capabilities
-- **Scanning Script**: `zap.sh` provides automated vulnerability discovery
-- **Audit Results**: 16 vulnerabilities identified (4 Medium, 7 Low, 5 Informational)
-- **Documentation**: Complete cybersecurity audit report with findings and remediation guidance
+### Environment Variables
+```bash
+export DEFECT_DOJO_API_TOKEN="your_api_token_here"
+export DEFECT_DOJO_URL="http://your-defectdojo-instance:8080"
+```
 
-**Key Features**:
-- Docker-based OWASP ZAP scanning
-- XML and JSON report generation
-- Automated scan execution with configurable parameters
-- Comprehensive vulnerability coverage (baseline + full scan)
+## 🔍 Security Scanning
 
-### ✅ 2. Package Vetting Process
-**Target**: https://github.com/Handlebars-Net/Handlebars.Net
+### Local Execution
+Run the OWASP ZAP security scan locally:
+```bash
+# Run with default target (admin.dev.beaconconnect.app)
+./zap.sh
 
-**Implementation Status**: COMPLETE
-- **Process Documentation**: Comprehensive package vetting workflow documentation
-- **Multi-Ecosystem Support**: .NET, JavaScript, Python, Java, Go
-- **Security Tools Integration**: Sonatype OSS Index, OSV-Scanner, GitHub metrics
-- **Risk Assessment Matrix**: Automated scoring system (0=Approved, 1-2=Conditional, 3+=Review Required)
+# Run with custom target
+./zap.sh https://your-target-url.com
 
-**Key Features**:
-- Automated risk scoring based on vulnerabilities, popularity, and license compliance
-- GitHub Actions workflow integration
-- Comprehensive reporting with technical details
-- Automatic issue creation for high-risk packages
+# Make executable if needed
+chmod +x zap.sh
+```
 
-### ✅ 3. Reporting System
-**Target**: DefectDojo-based vulnerability management
+### GitHub Actions Integration
+The repository includes a comprehensive GitHub Actions workflow for automated security scanning.
 
-**Implementation Status**: COMPLETE
-- **System Architecture**: DefectDojo integration with automated data ingestion
-- **Python Integration**: `upload_to_defectdojo.py` for seamless scan result uploads
-- **Dashboard Views**: Executive and technical dashboards with real-time metrics
-- **Tracking Capabilities**: Full vulnerability lifecycle management
+#### Workflow Features
+- **Automated Scanning**: Runs on push, PR, and schedule
+- **Manual Triggers**: Customizable scan parameters
+- **Multiple Scan Types**: Baseline, full, or both
+- **DefectDojo Integration**: Automatic vulnerability upload
+- **Artifact Storage**: 30-day retention of scan results
+- **PR Integration**: Automatic comments and issue creation
 
-**Key Features**:
-- Automated scan result ingestion
+#### How to Use
+
+1. **Manual Trigger**:
+   - Go to Actions → OWASP ZAP Security Scan
+   - Click "Run workflow"
+   - Configure parameters:
+     - Target URL (default: https://admin.dev.beaconconnect.app)
+     - Scan Type (baseline/full/both)
+     - Custom timeout (optional)
+
+2. **Automatic Triggers**:
+   - **Push to main**: Triggers full scan automatically
+   - **Pull Request**: Runs scan and comments results
+   - **Scheduled**: Weekly scan every Monday at 2 AM UTC
+
+3. **Required Secrets**:
+   ```bash
+   DEFECT_DOJO_API_TOKEN: Your DefectDojo API token
+   DEFECT_DOJO_URL: Your DefectDojo instance URL (optional)
+   ```
+
+#### Workflow Outputs
+- **Scan Reports**: XML and JSON formats
+- **Summary Report**: Markdown summary with findings
+- **Artifacts**: Downloadable scan results
+- **DefectDojo Integration**: Automatic vulnerability upload
+- **GitHub Security Tab**: Trivy dependency scanning results
+
+## 📦 Package Vetting
+
+Comprehensive package security assessment workflow supporting multiple ecosystems:
+- .NET (NuGet)
+- JavaScript (npm/yarn)
+- Python (pip/PyPI)
+- Java (Maven/Gradle)
+- Go (Go modules)
+
+See [Package Vetting Documentation](docs/package-vetting.md) for detailed usage.
+
+## 📊 Vulnerability Reporting
+
+Enterprise-grade vulnerability management using DefectDojo:
+- Real-time dashboards
+- Executive reporting
+- SLA tracking
+- Team performance metrics
+
+See [Vulnerability Reporting Documentation](docs/vulnerability-reporting-system.md) for details.
+
+## 🛠️ Tools and Technologies
+
+- **OWASP ZAP**: Web application security scanner
+- **DefectDojo**: Vulnerability management platform
+- **Docker**: Containerized scanning environment
+- **Python**: Automation and API integration
+- **GitHub Actions**: CI/CD pipeline automation
+- **Trivy**: Dependency vulnerability scanning
+
+## 📁 Repository Structure
+
+```
+.
+├── .github/
+│   └── workflows/
+│       └── zap-security-scan.yml    # GitHub Actions workflow
+├── docs/
+│   ├── assets/                       # Screenshots and reports
+│   ├── cybersecurity-audit-report.md # Audit findings
+│   ├── package-vetting.md            # Package vetting process
+│   └── vulnerability-reporting-system.md # Reporting system
+├── reports/                          # Scan output directory
+├── zap.sh                           # Local scanning script
+├── upload_to_defectdojo.py          # DefectDojo integration
+└── README.md                        # This file
+```
+
+## 🔧 Configuration
+
+### Customizing Scan Parameters
+Edit the workflow file `.github/workflows/zap-security-scan.yml` to modify:
+- Default target URLs
+- Scan timeouts
+- Trigger schedules
+- Output formats
+
+### Local Development
+```bash
+# Test scan locally
+./zap.sh https://localhost:3000
+
+# Run with custom timeout
+export SCAN_TIMEOUT=180
+./zap.sh
+```
+
+## 📈 Monitoring and Alerts
+
+### GitHub Notifications
+- Workflow success/failure notifications
+- PR comments with scan results
+- Automatic issue creation for failures
+
+### DefectDojo Dashboards
 - Real-time vulnerability metrics
-- Executive-level reporting
-- SLA tracking and team performance metrics
+- Executive reporting views
+- Compliance tracking
 
-## Technical Implementation Details
+## 🚨 Troubleshooting
 
-### Cybersecurity Audit Tools
-- **OWASP ZAP**: Primary vulnerability scanner
-- **Docker Integration**: Containerized scanning environment
-- **Report Formats**: XML, JSON, and PDF outputs
-- **Automation**: Bash script for end-to-end scanning workflow
+### Common Issues
+1. **Docker not running**: Ensure Docker daemon is active
+2. **Permission denied**: Make script executable with `chmod +x zap.sh`
+3. **DefectDojo connection failed**: Verify API token and URL
+4. **Scan timeout**: Increase timeout value for large applications
 
-### Package Vetting Architecture
-- **Multi-Tool Assessment**: Combines multiple security databases
-- **Risk Scoring Algorithm**: Quantitative assessment methodology
-- **GitHub Integration**: Automated workflow execution
-- **Comprehensive Reporting**: Technical and executive summaries
-
-### Vulnerability Reporting System
-- **DefectDojo Integration**: Enterprise-grade vulnerability management
-- **API Automation**: Python-based upload automation
-- **Dashboard Views**: Multiple stakeholder perspectives
-- **Compliance Reporting**: Audit-ready documentation
-
-## Evaluation Criteria Assessment
-
-### 🎯 Audit Thoroughness: 
-- Comprehensive OWASP ZAP scanning (baseline + full scan)
-- 16 vulnerabilities identified across multiple severity levels
-- Detailed technical findings with proof-of-concept demonstrations
-- Complete remediation guidance for all identified issues
-
-### 🎯 Security Best Practices: 
-- Industry-standard OWASP ZAP tooling
-- Multi-layered security assessment approach
-- Automated risk scoring and decision matrices
-- Integration with established security databases (Sonatype, OSV)
-
-### 🎯 Process Clarity: 
-- Step-by-step workflow documentation
-- Clear parameter definitions and usage examples
-- Automated decision matrices with clear thresholds
-- Comprehensive user guides for all processes
-
-### 🎯 Reporting System: 
-- DefectDojo enterprise integration
-- Real-time dashboard capabilities
-- Executive and technical reporting views
-- Automated data ingestion and processing
-
-### 🎯 Documentation: 
-- Comprehensive technical documentation
-- Visual aids (screenshots, diagrams)
-- Step-by-step implementation guides
-- Complete API integration examples
-
-## Deliverables Status
-
-### ✅ Technical Documentation
-- **Audit Report**: Complete cybersecurity findings with 16 vulnerabilities documented
-- **Package Vetting Process**: Comprehensive workflow with tools and criteria
-- **Reporting System**: Full DefectDojo integration with examples
-
-### ✅ Design Adherence
-- **Security-First Approach**: All solutions prioritize security and compliance
-- **Industry Standards**: OWASP, CVSS, and enterprise-grade tooling
-- **Automation**: Minimized manual intervention for consistency
-- **Scalability**: Designed for enterprise deployment
-
-## Project Strengths
-
-1. **Production Ready**: All components are fully functional and tested
-2. **Enterprise Grade**: DefectDojo integration provides professional vulnerability management
-3. **Comprehensive Coverage**: Addresses all assessment requirements thoroughly
-4. **Automation**: Minimizes manual effort while maintaining quality
-5. **Documentation**: Excellent technical and user documentation
-6. **Tool Integration**: Leverages industry-standard security tools
-7. **Multi-Platform Support**: Package vetting covers major development ecosystems
-
-## Technical Architecture
-
+### Debug Mode
+```bash
+# Run with verbose output
+bash -x ./zap.sh
 ```
 ┌─────────────────┐    ┌──────────────────┐    ┌─────────────────┐
-│   OWASP ZAP    │    │  Package Vetting │    │  DefectDojo    │
-│   Scanner      │    │  Workflow        │    │  Dashboard     │
+│   OWASP ZAP     │    │  Package Vetting │    │  DefectDojo     │
+│   Scanner       │    │  Workflow        │    │  Dashboard      │
 └─────────────────┘    └──────────────────┘    └─────────────────┘
          │                       │                       │
          ▼                       ▼                       ▼
 ┌─────────────────┐    ┌──────────────────┐    ┌─────────────────┐
-│   zap.sh       │    │  GitHub Actions  │    │  Python API    │
-│   Automation   │    │  Integration     │    │  Integration   │
+│   zap.sh        │    │  GitHub Actions  │    │  Python API     │
+│   Automation    │    │  Integration     │    │  Integration    │
 └─────────────────┘    └──────────────────┘    └─────────────────┘
          │                       │                       │
          ▼                       ▼                       ▼
 ┌─────────────────┐    ┌──────────────────┐    ┌─────────────────┐
-│   XML/JSON     │    │  Risk Assessment │    │  Vulnerability  │
-│   Reports      │    │  Reports         │    │  Management     │
+│   XML/JSON      │    │  Risk Assessment │    │  Vulnerability  │
+│   Reports       │    │  Reports         │    │  Management     │
 └─────────────────┘    └──────────────────┘    └─────────────────┘
 ```
 
-## Compliance and Standards
 
-- **OWASP Guidelines**: Follows OWASP testing methodology
-- **CVSS Scoring**: Industry-standard vulnerability severity assessment
-- **Enterprise Integration**: DefectDojo compliance with security frameworks
-- **Documentation Standards**: Professional technical documentation
-- **Automation Best Practices**: CI/CD integration ready
+## 📚 Documentation
+
+- [Cybersecurity Audit Report](docs/cybersecurity-audit-report.md)
+- [Package Vetting Process](docs/package-vetting.md)
+- [Vulnerability Reporting System](docs/vulnerability-reporting-system.md)
+
+## 🤝 Contributing
+
+1. Fork the repository
+2. Create a feature branch
+3. Make your changes
+4. Test thoroughly
+5. Submit a pull request
 
 ## Conclusion
 
