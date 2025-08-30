@@ -31,7 +31,7 @@ The vetting process combines multiple security assessment tools:
 | `github_repo_url` | Optional GitHub API URL | ❌ No | _(auto-detected)_ | `https://api.github.com/repos/facebook/react` |
 | `ecosystem` | Override auto-detection | ❌ No | `auto` | `dotnet`, `npm`, `python`, `java`, `go` |
 
-## How to Use the Workflow
+## How to Use the Workflow [package-vetting.yml](../.github/workflows/package-vetting.yml)
 
 ### Step 1: Access Workflow
 1. Navigate to your repository on GitHub
